@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: conciliador-bancario
+Version: 0.1.0
+Summary: Sistema de conciliación bancaria en Streamlit
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: streamlit>=1.37.1
+Requires-Dist: pandas>=2.2.3
+Requires-Dist: openpyxl
+Requires-Dist: pyyaml
+
+# Conciliador Bancario
+
+
+App de conciliación bancaria modular (UI + Lógica + Infra) con:
+- Detección automática de **Importe único** vs **Débito/Crédito**.
+- Conciliación **exacta** por Fecha + Importe + (al menos un número coincidente si existen).
+- **Sugerencias** por tolerancias de fecha/importe y por texto.
+- **Vista** con fecha formateada (`config.yaml`) sin afectar el **Excel** (fechas reales).
+
+
+## Requisitos
+python -m venv .venv source .venv/bin/activate # Windows: .venv\Scripts\activate pip install -r requirements.txt
+
+## Ejecutar
+streamlit run ui/app_streamlit.py
+
+## Configuración
+Editar `config.yaml` para formato de fechas de vista y tolerancias por defecto.
+
+app: fecha_vista_formato: "%d/%m/%Y"
+
+## Tests (opcional)
+
+pip install pytest pytest -q

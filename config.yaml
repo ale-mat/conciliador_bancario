@@ -1,0 +1,14 @@
+app:
+  title: "Conciliación Bancaria"
+  page_layout: "wide"
+  fecha_vista_formato: "%d/%m/%Y"   # formato de fecha en la UI
+
+conciliacion:
+  tolerancia_dias_default: 1        # tolerancia en días
+  tolerancia_importe_default: 0.00  # tolerancia en importes
+  permitir_conciliacion_grupal: true
+  permitir_grupos_fuera_de_fecha: false
+
+lectura:
+  csv_encodings: ["latin1", "utf-8", "cp1252"]
+  csv_separadores: [";", ",", "\t", "espacios"]
