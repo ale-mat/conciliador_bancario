@@ -1,27 +1,53 @@
 from __future__ import annotations
+
+import unicodedata
+
 import pandas as pd
-from typing import Tuple
+
 from logic.modelos import Movimiento, Origen
+
+
+def _sanitize_header(value: str) -> str:
+    lowered = str(value).lower()
+    replacements = {
+        "d?bito": "debito",
+        "cr?dito": "credito",
+        "d�bito": "debito",
+        "cr�dito": "credito",
+    }
+    for wrong, corrected in replacements.items():
+        if wrong in lowered:
+            lowered = lowered.replace(wrong, corrected)
+    normalized = unicodedata.normalize("NFKD", lowered)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 
 def detectar_columnas(df: pd.DataFrame) -> tuple[str | None, str | None, str | None, str | None, str | None]:
     cols = list(df.columns)
     lower = [str(c).lower() for c in cols]
+    sanitized = [_sanitize_header(c) for c in cols]
 
     def pick(keywords):
         for kw in keywords:
-            for c, s in zip(cols, lower):
-                if kw in s:
-                    return c
+            kw_lower = kw.lower()
+            kw_sanitized = _sanitize_header(kw)
+            for original, raw, clean in zip(cols, lower, sanitized):
+                if (
+                    kw_lower in raw
+                    or kw_lower in clean
+                    or kw_sanitized in raw
+                    or kw_sanitized in clean
+                ):
+                    return original
         return None
 
     f = pick(["fecha"])  # Fecha
     i = pick(["importe", "monto"])  # Importe único
-    d = pick(["débito", "debito", "salida"])  # Débito
-    c = pick(["crédito", "credito", "entrada"])  # Crédito
+    d = pick(["debito", "salida"])  # Débito
+    c = pick(["credito", "entrada"])  # Crédito
     desc = pick([
         "detalle", "descrip", "concepto", "leyenda", "observac",
-        "referen", "glosa", "coment", "n°", "nro", "numero"
+        "referen", "glosa", "coment", "n�", "n°", "nro", "numero"
     ])
     return f, i, d, c, desc
 
