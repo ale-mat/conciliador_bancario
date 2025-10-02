@@ -23,3 +23,9 @@ venv/
 # --- Archivos de Excel/CSV temporales ---
 ~$*.xls*
 *.bak
+
+# Packaging
+*.egg-info/
+*.egg
+dist/
+build/
