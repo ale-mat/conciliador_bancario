@@ -11,4 +11,4 @@ conciliacion:
 
 lectura:
   csv_encodings: ["latin1", "utf-8", "cp1252"]
-  csv_separadores: [";", ",", "\t", "espacios"]
+  csv_separadores: [";", ",", "\t", "\\s{2,}"]
