@@ -1,0 +1,25 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+
+# --- Entornos virtuales ---
+venv/
+.env/
+
+# --- Archivos temporales ---
+*.log
+*.tmp
+*.swp
+.DS_Store
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- IDEs ---
+.vscode/
+.idea/
+
+# --- Archivos de Excel/CSV temporales ---
+~$*.xls*
+*.bak
