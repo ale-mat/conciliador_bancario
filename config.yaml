@@ -70,10 +70,8 @@ lectura:
   csv_encodings: ["latin1", "utf-8", "cp1252"]
   csv_separadores: [";", ",", "\t", "\\s{2,}"]
 
-# TODO: configurar bancos habilitados y formatos de salida
 bancos:
   activos: ["galicia", "nacion", "supervielle", "ciudad"]
 
 salida:
-  # TODO: definir formatos de salida (excel/csv), nombres de archivos, etc.
   formato_preferido: "excel"
