@@ -10,6 +10,7 @@ from infra.export import dataframe_a_excel_bytes
 from logic.lectura import calcular_importe_final, detectar_columnas
 from logic.conciliacion import conciliar, Parametros
 from logic.modelos import Movimiento
+from infra.loader_bancos import cargar_banco
 
 # =========================
 # Helper para CSV
@@ -26,6 +27,25 @@ def leer_csv_seguro(file):
             except Exception:
                 continue
     raise ValueError(f"❌ No se pudo leer {file.name} con encoding/separador común.")
+
+
+def leer_csv_banco(file):
+    """Intenta usar el loader bancario y cae a heurística si falla."""
+    try:
+        file.seek(0)
+    except Exception:
+        pass
+
+    try:
+        df, banco_detectado = cargar_banco(file)
+        df.attrs["banco_detectado"] = banco_detectado
+        return df
+    except Exception:
+        try:
+            file.seek(0)
+        except Exception:
+            pass
+        return leer_csv_seguro(file)
 
 # =========================
 # Configuración inicial
@@ -107,7 +127,9 @@ if archivos_banco and archivos_interno:
                 )
             df_b = pd.read_excel(f, sheet_name=hoja_b)
         else:
-            df_b = leer_csv_seguro(f)
+            buffer = io.BytesIO(f.getvalue())
+            buffer.name = f.name
+            df_b = leer_csv_banco(buffer)
         dfs_banco.append(df_b)
 
     # ----- Interno -----
@@ -124,7 +146,9 @@ if archivos_banco and archivos_interno:
                 )
             df_i = pd.read_excel(f, sheet_name=hoja_i)
         else:
-            df_i = leer_csv_seguro(f)
+            buffer = io.BytesIO(f.getvalue())
+            buffer.name = f.name
+            df_i = leer_csv_banco(buffer)
         dfs_interno.append(df_i)
 
     df_banco = pd.concat(dfs_banco, ignore_index=True)
@@ -288,9 +312,15 @@ if archivos_banco and archivos_interno:
 
     # ---- Vista con filtros ----
     st.markdown("**Resultado**")
-    estados_unicos = sorted(salida["estado"].dropna().unique().tolist())
-    estados_sel = st.multiselect("Filtrar por estado", estados_unicos, default=estados_unicos)
-    salida_filtrada = salida[salida["estado"].isin(estados_sel)]
+    salida_filtrada = salida
+    if "estado" in salida.columns:
+        estados_unicos = sorted(salida["estado"].dropna().unique().tolist())
+        estados_sel = st.multiselect(
+            "Filtrar por estado",
+            estados_unicos,
+            default=estados_unicos,
+        )
+        salida_filtrada = salida[salida["estado"].isin(estados_sel)]
 
     filtro_texto = st.text_input("Buscar en descripciones", "")
     if filtro_texto:
@@ -300,7 +330,18 @@ if archivos_banco and archivos_interno:
         ]
 
     # ---- Mostrar tabla ----
-    st.dataframe(salida_filtrada, use_container_width=True)
+    def formatear_df_ui(df: pd.DataFrame):
+        formatos = {}
+        if "fecha_banco" in df.columns:
+            formatos["fecha_banco"] = lambda x: x.strftime("%d/%m/%Y") if pd.notnull(x) else ""
+        if "fecha_interno" in df.columns:
+            formatos["fecha_interno"] = lambda x: x.strftime("%d/%m/%Y") if pd.notnull(x) else ""
+        for col in ["importe_banco", "importe_interno"]:
+            if col in df.columns:
+                formatos[col] = lambda x: f"{x:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if pd.notnull(x) else ""
+        return df.style.format(formatos)
+
+    st.dataframe(formatear_df_ui(salida_filtrada), use_container_width=True)
 
     # ---- Resumen ----
     st.markdown("**Resumen**")
@@ -315,20 +356,24 @@ if archivos_banco and archivos_interno:
             return "No conciliados"
         return "Otros"
 
-    # Contar por estado
-    resumen_counts = salida_filtrada["estado"].value_counts()
+    if "estado" in salida_filtrada.columns:
+        # Contar por estado
+        resumen_counts = salida_filtrada["estado"].value_counts()
 
-    # Agregar columna pilar y ordenar por ella
-    resumen = (
-        resumen_counts
-        .rename_axis("Estado")
-        .reset_index(name="Cantidad")
-        .assign(Pilar=lambda df: df["Estado"].apply(clasificar_estado))
-        .sort_values(["Pilar", "Estado"], key=lambda col: col.map({"Conciliados": 1, "Sugeridos": 2, "No conciliados": 3, "Otros": 4}))
-        .reset_index(drop=True)
-    )
+        # Agregar columna pilar y ordenar por ella
+        resumen = (
+            resumen_counts
+            .rename_axis("Estado")
+            .reset_index(name="Cantidad")
+            .assign(Pilar=lambda df: df["Estado"].apply(clasificar_estado))
+            .sort_values(
+                ["Pilar", "Estado"],
+                key=lambda col: col.map({"Conciliados": 1, "Sugeridos": 2, "No conciliados": 3, "Otros": 4}),
+            )
+            .reset_index(drop=True)
+        )
 
-    st.dataframe(resumen, use_container_width=True)
+        st.dataframe(resumen, use_container_width=True)
 
     # ---- Exportar a Excel ----
     formato_columnas_fecha = {"fecha_banco": "DD/MM/YYYY", "fecha_interno": "DD/MM/YYYY"}

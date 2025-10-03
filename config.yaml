@@ -8,7 +8,72 @@ conciliacion:
   tolerancia_importe_default: 0.00  # tolerancia en importes
   permitir_conciliacion_grupal: true
   permitir_grupos_fuera_de_fecha: false
+  stopwords:
+    # Palabras comunes y de dominio que no aportan significado
+    - de
+    - la
+    - el
+    - en
+    - y
+    - o
+    - a
+    - los
+    - las
+    - un
+    - una
+    - por
+    - para
+    - con
+    - al
+    - del
+    - sin
+    - sobre
+    - entre
+    - desde
+    - hasta
+    # Dominio bancario genérico
+    - transferencia
+    - pago
+    - cliente
+    - banco
+    - interno
+    - debito
+    - credito
+    - detalle
+    - concepto
+    - operacion
+    - movimiento
+  campos_descripcion:
+    - Descripción
+    - Concepto
+    - Detalle
+    - Observaciones
+    - Observaciones Cliente
+    - Leyendas Adicionales1
+    - Leyendas Adicionales2
+    - Leyendas Adicionales3
+    - Leyendas Adicionales4
+    - Número de Comprobante
+    - N° de Comprobante
+    - Nro de Comprobante
+    - Comprobante
+    - Referencia
+    - Glosa
+    - Comentario
+    - Leyenda
+    - Nota
+    - Info
+    - Texto
+    - Descripción Adicional
 
 lectura:
   csv_encodings: ["latin1", "utf-8", "cp1252"]
   csv_separadores: [";", ",", "\t", "\\s{2,}"]
+
+# TODO: configurar bancos habilitados y formatos de salida
+bancos:
+  activos: ["galicia", "nacion", "supervielle", "ciudad"]
+
+salida:
+  # TODO: definir formatos de salida (excel/csv), nombres de archivos, etc.
+  formato_preferido: "excel"

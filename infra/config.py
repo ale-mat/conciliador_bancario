@@ -17,6 +17,8 @@ class ConciliacionConfig:
     tolerancia_importe_default: float
     permitir_conciliacion_grupal: bool
     permitir_grupos_fuera_de_fecha: bool
+    stopwords: list[str] | None = None
+    campos_descripcion: list[str] | None = None
 
 
 @dataclass(frozen=True)

@@ -3,8 +3,12 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Iterable
 from collections import defaultdict
+import re
+import unicodedata
 
 from logic.modelos import Movimiento, Match
+from infra.loader_bancos import cargar_banco
+from infra.config import load_config
 
 
 @dataclass(frozen=True)
@@ -16,9 +20,48 @@ class Parametros:
 
 
 def _nums(texto: str) -> set[str]:
-    """Extrae todos los números de un texto como strings."""
-    import re
+    """Extrae todos los numeros de un texto como strings."""
     return set(re.findall(r"\d+", texto or ""))
+
+
+def _strip_accents(text: str) -> str:
+    if not isinstance(text, str):
+        return str(text)
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+# Stopwords configurables desde config.yaml
+_CFG = load_config("config.yaml")
+_STOPWORDS = set(map(str.lower, (_CFG.conciliacion.stopwords or [])))
+
+
+def tiene_match_textual(desc1: str, desc2: str) -> bool:
+    """True si hay al menos un token significativo en comun (palabra o numero).
+
+    - Tokeniza por no alfanumerico
+    - Normaliza a minusculas y sin tildes
+    - Remueve stopwords y tokens de longitud 1
+    """
+    def tokens(s: str) -> set[str]:
+        s = _strip_accents((s or "").lower())
+        toks = re.split(r"[^0-9a-zA-Z]+", s)
+        out = set()
+        for t in toks:
+            if not t:
+                continue
+            if len(t) <= 1:
+                continue
+            if t in _STOPWORDS:
+                continue
+            out.add(t)
+        return out
+
+    t1, t2 = tokens(desc1), tokens(desc2)
+    if t1 & t2:
+        return True
+    # TODO: fuzzy matching (difflib / rapidfuzz) para coincidencia parcial
+    return False
 
 
 def _key_base(m: Movimiento) -> tuple:
@@ -34,20 +77,19 @@ def conciliar(
     matches: list[Match] = []
     consumidos_b, consumidos_i = set(), set()
 
-    # Índice por clave base (fecha+importe)
+    # Indice por clave base (fecha+importe)
     idx_i = {_key_base(m): m for m in interno}
     keys_comunes = set(_key_base(m) for m in banco) & set(idx_i.keys())
 
-    # --- Conciliación exacta ---
+    # --- Conciliacion exacta (requiere texto en comun) ---
     for b in banco:
         kb = _key_base(b)
         if kb in idx_i:
             i = idx_i[kb]
-            nb, ni = _nums(b.descripcion), _nums(i.descripcion)
-            if nb & ni:
-                estado, corr = "Conciliado exacto", "Coincidencia con números"
+            if tiene_match_textual(b.descripcion, i.descripcion):
+                estado, corr = "Conciliado exacto", "Coincidencia por fecha/importe y texto"
             else:
-                estado, corr = "Conciliado exacto", "Coincidencia exacta por fecha/importe"
+                estado, corr = "Sugerido (importe+fecha sin texto)", "Revisar: coincide importe y fecha pero no texto"
             matches.append(Match(
                 fecha_banco=b.fecha,
                 importe_banco=b.importe,
@@ -73,23 +115,39 @@ def conciliar(
                                        params.tolerancia_dias)
         )
 
-    # --- Conciliación grupal ---
+    # --- Conciliacion grupal ---
     if params.permitir_conciliacion_grupal:
-        matches.extend(
-            conciliacion_grupal(
+        # Fase 1: mismo día
+        mg = conciliacion_grupal(
+            pendientes_b, pendientes_i,
+            params.tolerancia_importe,
+            params.tolerancia_dias,
+            False,
+        )
+        if not mg and params.permitir_grupos_fuera_de_fecha:
+            # Fase 2: permitir cruces por tolerancia de días
+            mg = conciliacion_grupal(
                 pendientes_b, pendientes_i,
                 params.tolerancia_importe,
                 params.tolerancia_dias,
-                params.permitir_grupos_fuera_de_fecha
+                True,
             )
-        )
+        matches.extend(mg)
 
-    # --- Recalcular pendientes después de matches adicionales ---
+    # --- Recalcular pendientes despues de matches adicionales ---
     usados_b = {(m.fecha_banco, m.importe_banco, m.desc_banco) for m in matches}
     usados_i = {(m.fecha_interno, m.importe_interno, m.desc_interno) for m in matches}
 
     pendientes_b = [m for m in pendientes_b if (m.fecha, m.importe, m.descripcion) not in usados_b]
     pendientes_i = [m for m in pendientes_i if (m.fecha, m.importe, m.descripcion) not in usados_i]
+
+    # Consumir movimientos de fechas agrupadas (para evitar que sigan apareciendo como pendientes)
+    fechas_grupo_b = {m.fecha_banco for m in matches if str(m.estado).startswith("Sugerido (grupal)")}
+    fechas_grupo_i = {m.fecha_interno for m in matches if str(m.estado).startswith("Sugerido (grupal)")}
+    if fechas_grupo_b:
+        pendientes_b = [m for m in pendientes_b if m.fecha not in fechas_grupo_b]
+    if fechas_grupo_i:
+        pendientes_i = [m for m in pendientes_i if m.fecha not in fechas_grupo_i]
 
     return matches, pendientes_b, pendientes_i
 
@@ -172,6 +230,10 @@ def conciliacion_grupal(
                 desc_b = "; ".join(m.descripcion for m in grupo_b[:3])
                 desc_i = "; ".join(m.descripcion for m in grupo_i[:3])
 
+                # Evitar grupos 1 a 1 (ya cubiertos por otras reglas)
+                if len(grupo_b) == 1 and len(grupo_i) == 1:
+                    continue
+
                 out.append(Match(
                     fecha_banco=fb,
                     importe_banco=suma_b,
@@ -183,3 +245,12 @@ def conciliacion_grupal(
                     correccion_sugerida="Revisar suma de movimientos (grupo)",
                 ))
     return out
+
+
+# ==========================================================
+# Integración con loader de bancos
+# ==========================================================
+def conciliar_archivo(path_or_file):
+    """Carga y detecta el banco desde un archivo y devuelve (df, banco)."""
+    df, banco = cargar_banco(path_or_file)
+    return df, banco
