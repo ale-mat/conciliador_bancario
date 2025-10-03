@@ -12,6 +12,7 @@ venv/
 *.tmp
 *.swp
 .DS_Store
+/tmp_*
 
 # --- Notebooks ---
 .ipynb_checkpoints/
