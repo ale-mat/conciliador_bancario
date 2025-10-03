@@ -10,10 +10,14 @@ from logic.modelos import Movimiento, Origen
 def _sanitize_header(value: str) -> str:
     lowered = str(value).lower()
     replacements = {
-        "d?bito": "debito",
         "cr?dito": "credito",
-        "d�bito": "debito",
+        "crÃ©dito": "credito",
+        "crÃ©ditos": "creditos",
         "cr�dito": "credito",
+        "d?bito": "debito",
+        "dÃ©bito": "debito",
+        "dÃ©bitos": "debitos",
+        "d�bito": "debito",
     }
     for wrong, corrected in replacements.items():
         if wrong in lowered:
