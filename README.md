@@ -9,15 +9,17 @@ Aplicación modular para **conciliación bancaria**, diseñada con separación d
 
 ## ✨ Funcionalidades principales
 
-* 🔍 **Detección automática** de movimientos: Importe único vs Débito/Crédito.
-* ✅ **Conciliación exacta** por **Fecha + Importe** (+ coincidencia parcial en descripción cuando aplica).
-* 💡 **Sugerencias inteligentes** por:
-
-  * Diferencias de fecha (dentro de tolerancia).
-  * Diferencias de importe (dentro de tolerancia).
-  * Coincidencias parciales de texto.
-* 📅 **Fechas configurables** en `config.yaml`, sin alterar los tipos de fecha reales en Excel.
-* 📊 **Interfaz en Streamlit** con filtros por estado, búsqueda por texto y **resumen de resultados**.
+* 🔍 **Detección automática** de importes: Importe único o Débito/Crédito.
+* ✅ **Conciliación exacta** por **Fecha + Importe + coincidencia parcial en descripción**.
+* 💡 **Sugerencias inteligentes**:
+  - Diferencias de fecha (± tolerancia).
+  - Diferencias de importe (± tolerancia).
+  - Coincidencias parciales de texto.
+* 📅 **Fechas configurables** en `config.yaml`, con visualización en **DD/MM/AAAA**.
+* 📊 **Interfaz en Streamlit** con filtros por estado, búsqueda en descripciones y **resumen por pilares**:
+  - Conciliados
+  - Sugeridos
+  - No conciliados
 
 ---
 
