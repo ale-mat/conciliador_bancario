@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Iterable
 from collections import defaultdict
 import re
@@ -17,6 +17,8 @@ class Parametros:
     tolerancia_dias: int = 0
     permitir_conciliacion_grupal: bool = False
     permitir_grupos_fuera_de_fecha: bool = False
+    fecha_desde: date | None = None
+    fecha_hasta: date | None = None
 
 
 def _nums(texto: str) -> set[str]:
@@ -77,35 +79,55 @@ def conciliar(
     matches: list[Match] = []
     consumidos_b, consumidos_i = set(), set()
 
-    # Indice por clave base (fecha+importe)
-    idx_i = {_key_base(m): m for m in interno}
-    keys_comunes = set(_key_base(m) for m in banco) & set(idx_i.keys())
+    # --- Filtrar por rango de fechas si corresponde ---
+    if params.fecha_desde or params.fecha_hasta:
+        banco = [m for m in banco if
+                 (params.fecha_desde is None or m.fecha >= params.fecha_desde) and
+                 (params.fecha_hasta is None or m.fecha <= params.fecha_hasta)]
+        interno = [m for m in interno if
+                   (params.fecha_desde is None or m.fecha >= params.fecha_desde) and
+                   (params.fecha_hasta is None or m.fecha <= params.fecha_hasta)]
 
-    # --- Conciliacion exacta (requiere texto en comun) ---
+    # Indice multivaluado por clave base (fechaimporte)
+    idx_i = defaultdict(list)
+    for m in interno:
+        idx_i[_key_base(m)].append(m)
+
+    # --- Conciliacion exacta (consumo de a uno, requiere texto en comun) ---
     for b in banco:
         kb = _key_base(b)
         if kb in idx_i:
-            i = idx_i[kb]
-            if tiene_match_textual(b.descripcion, i.descripcion):
-                estado, corr = "Conciliado exacto", "Coincidencia por fecha/importe y texto"
-            else:
+            candidatos = [i for i in idx_i[kb] if id(i) not in consumidos_i]
+            if not candidatos:
+                continue
+            # intentar emparejar el primero que tenga match textual
+            i_match = None
+            for i in candidatos:
+                if tiene_match_textual(b.descripcion, i.descripcion):
+                    i_match = i
+                    estado, corr = "Conciliado exacto", "Coincidencia por fecha/importe y texto"
+                    break
+            # si no hubo texto en común, usar el primero como sugerido
+            if not i_match:
+                i_match = candidatos[0]
                 estado, corr = "Sugerido (importe+fecha sin texto)", "Revisar: coincide importe y fecha pero no texto"
+
             matches.append(Match(
                 fecha_banco=b.fecha,
                 importe_banco=b.importe,
                 desc_banco=b.descripcion,
-                fecha_interno=i.fecha,
-                importe_interno=i.importe,
-                desc_interno=i.descripcion,
+                fecha_interno=i_match.fecha,
+                importe_interno=i_match.importe,
+                desc_interno=i_match.descripcion,
                 estado=estado,
                 correccion_sugerida=corr,
             ))
             consumidos_b.add(id(b))
-            consumidos_i.add(id(i))
+            consumidos_i.add(id(i_match))
 
     # --- Pendientes ---
-    pendientes_b = [m for m in banco if id(m) not in consumidos_b and _key_base(m) not in keys_comunes]
-    pendientes_i = [m for m in interno if id(m) not in consumidos_i and _key_base(m) not in keys_comunes]
+    pendientes_b = [m for m in banco if id(m) not in consumidos_b]
+    pendientes_i = [m for m in interno if id(m) not in consumidos_i]
 
     # --- Sugerencias por tolerancia ---
     if params.tolerancia_importe > 0 or params.tolerancia_dias > 0:

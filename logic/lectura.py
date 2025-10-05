@@ -55,6 +55,40 @@ def detectar_columnas(df: pd.DataFrame) -> tuple[str | None, str | None, str | N
     ])
     return f, i, d, c, desc
 
+def detectar_encabezado(df: pd.DataFrame, tope: int = 10) -> int:
+    """
+    Detecta la fila que más probablemente corresponde al encabezado de un Excel
+    buscando coincidencias con palabras clave típicas (fecha, importe, débito, etc).
+
+    Parámetros
+    ----------
+    df : pd.DataFrame
+        DataFrame leído con header=None.
+    tope : int, opcional
+        Cantidad máxima de filas a analizar desde arriba, por defecto 10.
+
+    Retorna
+    -------
+    int
+        Índice de la fila que se usará como encabezado.
+    """
+    palabras = [
+        "fecha", "importe", "monto",
+        "debito", "débito",
+        "credito", "crédito",
+        "concepto", "desc", "detalle",
+        "nro", "numero"
+    ]
+    fila_header, max_matches = 0, 0
+    tope = min(tope, len(df))
+
+    for i in range(tope):
+        fila = df.iloc[i].astype(str).str.lower()
+        matches = sum(any(p in val for p in palabras) for val in fila)
+        if matches > max_matches:
+            max_matches, fila_header = matches, i
+
+    return fila_header
 
 def limpiar_importe_serie(serie: pd.Series) -> pd.Series:
     return pd.to_numeric(

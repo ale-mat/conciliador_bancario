@@ -7,7 +7,11 @@ import streamlit as st
 
 from infra.config import load_config
 from infra.export import dataframe_a_excel_bytes
-from logic.lectura import calcular_importe_final, detectar_columnas
+from logic.lectura import (
+    calcular_importe_final,
+    detectar_columnas,
+    detectar_encabezado,
+)
 from logic.conciliacion import conciliar, Parametros
 from logic.modelos import Movimiento
 from infra.loader_bancos import cargar_banco
@@ -113,43 +117,50 @@ if archivos_banco and archivos_interno:
     # ---- Leer archivos como DataFrames ----
     dfs_banco, dfs_interno = [], []
 
+    colB, colI = st.columns(2)
     # ----- Banco -----
-    for f in archivos_banco:
-        if f.name.lower().endswith((".xlsx", ".xlsm")):
-            xls = pd.ExcelFile(f, engine="openpyxl")
-            if len(xls.sheet_names) == 1:
-                hoja_b = xls.sheet_names[0]
+    with colB:
+        for f in archivos_banco:
+            if f.name.lower().endswith((".xlsx", ".xlsm")):
+                xls = pd.ExcelFile(f, engine="openpyxl")
+                if len(xls.sheet_names) == 1:
+                    hoja_b = xls.sheet_names[0]
+                else:
+                    hoja_b = st.selectbox(
+                        f"Banco: seleccione hoja de {f.name}",
+                        xls.sheet_names,
+                        key=f"Banco_{f.name}"
+                    )
+                tmp = pd.read_excel(f, sheet_name=hoja_b, header=None)
+                header_row = detectar_encabezado(tmp)
+                df_b = pd.read_excel(f, sheet_name=hoja_b, header=header_row)
             else:
-                hoja_b = st.selectbox(
-                    f"Banco: seleccione hoja de {f.name}",
-                    xls.sheet_names,
-                    key=f"Banco_{f.name}"
-                )
-            df_b = pd.read_excel(f, sheet_name=hoja_b)
-        else:
-            buffer = io.BytesIO(f.getvalue())
-            buffer.name = f.name
-            df_b = leer_csv_banco(buffer)
-        dfs_banco.append(df_b)
+                buffer = io.BytesIO(f.getvalue())
+                buffer.name = f.name
+                df_b = leer_csv_banco(buffer)
+            dfs_banco.append(df_b)
 
     # ----- Interno -----
-    for f in archivos_interno:
-        if f.name.lower().endswith((".xlsx", ".xlsm")):
-            xls = pd.ExcelFile(f, engine="openpyxl")
-            if len(xls.sheet_names) == 1:
-                hoja_i = xls.sheet_names[0]
+    with colI:
+        for f in archivos_interno:
+            if f.name.lower().endswith((".xlsx", ".xlsm")):
+                xls = pd.ExcelFile(f, engine="openpyxl")
+                if len(xls.sheet_names) == 1:
+                    hoja_i = xls.sheet_names[0]
+                else:
+                    hoja_i = st.selectbox(
+                        f"Interno: seleccione hoja de {f.name}",
+                        xls.sheet_names,
+                        key=f"Interno_{f.name}"
+                    )
+                tmp = pd.read_excel(f, sheet_name=hoja_i, header=None)
+                header_row = detectar_encabezado(tmp)
+                df_i = pd.read_excel(f, sheet_name=hoja_i, header=header_row)
             else:
-                hoja_i = st.selectbox(
-                    f"Interno: seleccione hoja de {f.name}",
-                    xls.sheet_names,
-                    key=f"Interno_{f.name}"
-                )
-            df_i = pd.read_excel(f, sheet_name=hoja_i)
-        else:
-            buffer = io.BytesIO(f.getvalue())
-            buffer.name = f.name
-            df_i = leer_csv_banco(buffer)
-        dfs_interno.append(df_i)
+                buffer = io.BytesIO(f.getvalue())
+                buffer.name = f.name
+                df_i = leer_csv_banco(buffer)
+            dfs_interno.append(df_i)
 
     df_banco = pd.concat(dfs_banco, ignore_index=True)
     df_interno = pd.concat(dfs_interno, ignore_index=True)
@@ -157,6 +168,35 @@ if archivos_banco and archivos_interno:
     # ---- Detectar columnas automáticamente ----
     f_b, i_b, deb_b, cred_b, d_b = detectar_columnas(df_banco)
     f_i, i_i, deb_i, cred_i, d_i = detectar_columnas(df_interno)
+
+    # ---- Mostrar columnas detectadas ----
+    st.subheader("Columnas detectadas automáticamente")
+    st.caption("Estas son las columnas que el sistema detectó. Podés modificarlas en el mapeo de abajo si algo no coincide.")
+
+    def tabla_detectadas(origen: str, f, i, d, c, desc):
+        if d and c:  # Débito/Crédito detectados
+            campos = ["Fecha", "Débito", "Crédito", "Descripción"]
+            cols = [f, d, c, desc]
+        elif i:  # Importe único detectado
+            campos = ["Fecha", "Importe", "Descripción"]
+            cols = [f, i, desc]
+        else:  # Caso raro: no se detectó bien
+            campos = ["Fecha", "Importe", "Débito", "Crédito", "Descripción"]
+            cols = [f, i, d, c, desc]
+
+        st.markdown(f"**{origen}**")
+        st.table({
+            "Campo": campos,
+            "Columna detectada": cols
+        })
+
+    colB, colI = st.columns(2)
+
+    with colB:
+        tabla_detectadas("Banco", f_b, i_b, deb_b, cred_b, d_b)
+
+    with colI:
+        tabla_detectadas("Interno", f_i, i_i, deb_i, cred_i, d_i)
 
     # ---- Selección de columnas en dos columnas ----
     st.subheader("Mapeo de columnas")
@@ -226,6 +266,26 @@ if archivos_banco and archivos_interno:
                            index=(df_interno.columns.get_loc(d_i) if d_i in df_interno.columns else 0),
                            key="desc_i")
 
+    # ---- Filtro de fechas ----
+    df_banco[f_b] = pd.to_datetime(df_banco[f_b], errors="coerce").dt.floor("d")
+    df_interno[f_i] = pd.to_datetime(df_interno[f_i], errors="coerce").dt.floor("d")
+
+    usar_rango = st.checkbox("Filtrar por rango de fechas", value=False)
+    if usar_rango:
+        fmin_b = df_banco[f_b].min()
+        fmax_b = df_banco[f_b].max()
+        c1, c2 = st.columns(2)
+        with c1:
+            fecha_desde = pd.to_datetime(st.date_input("Desde", value=fmin_b))
+        with c2:
+            fecha_hasta = pd.to_datetime(st.date_input("Hasta", value=fmax_b))
+    else:
+        fecha_desde = df_banco[f_b].min()
+        fecha_hasta = df_banco[f_b].max()
+
+    df_banco = df_banco[(df_banco[f_b] >= fecha_desde) & (df_banco[f_b] <= fecha_hasta)]
+    df_interno = df_interno[(df_interno[f_i] >= fecha_desde) & (df_interno[f_i] <= fecha_hasta)]
+
     # ---- Calcular importe final ----
     df_banco["importe_final"] = calcular_importe_final(df_banco, i_b, deb_b, cred_b)
     df_interno["importe_final"] = calcular_importe_final(df_interno, i_i, deb_i, cred_i)
@@ -245,7 +305,7 @@ if archivos_banco and archivos_interno:
     # ---- Parámetros de conciliación ----
     st.subheader("Parámetros de conciliación")
     colp1, colp2, colp3, colp4 = st.columns(4)
-
+    
     with colp1:
         tol_importe = st.number_input("Tolerancia importe (±)",
                                       value=float(cfg.conciliacion.tolerancia_importe_default),
@@ -260,12 +320,44 @@ if archivos_banco and archivos_interno:
     with colp4:
         permitir_grupos_fuera = st.checkbox("Permitir grupos fuera de fecha",
                                             value=cfg.conciliacion.permitir_grupos_fuera_de_fecha)
+    
+    # --- Filtros avanzados ---
+    with st.expander("📅 Filtro por fecha"):
+        # Detectar min y max del universo actual
+        fechas_banco = pd.to_datetime(df_banco[f_b], errors="coerce")
+        fechas_interno = pd.to_datetime(df_interno[f_i], errors="coerce")
+        fechas_validas = pd.concat([fechas_banco, fechas_interno]).dropna()
 
+        fmin = fechas_validas.min() if not fechas_validas.empty else None
+        fmax = fechas_validas.max() if not fechas_validas.empty else None
+
+        if fmin and fmax:
+            st.caption(f"Rango detectado en los archivos: {fmin.date()} → {fmax.date()}")
+
+        colf1, colf2 = st.columns(2)
+        with colf1:
+            fecha_desde = st.date_input(
+                "Fecha desde",
+                value=fmin.date() if fmin else None
+            )
+        with colf2:
+            fecha_hasta = st.date_input(
+                "Fecha hasta",
+                value=fmax.date() if fmax else None
+            )
+
+        # Validación
+        if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+            st.error("⚠️ La fecha 'Desde' no puede ser mayor que 'Hasta'.")
+            st.stop()    
+    
     parametros = Parametros(
         tolerancia_dias=tol_dias,
         tolerancia_importe=tol_importe,
         permitir_conciliacion_grupal=permitir_grupal,
         permitir_grupos_fuera_de_fecha=permitir_grupos_fuera,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
     )
 
     # ---- Conciliación ----
