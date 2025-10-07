@@ -23,6 +23,7 @@ venv/
 
 # --- Archivos de Excel/CSV temporales ---
 ~$*.xls*
+~$*.csv*
 *.bak
 
 # Packaging
