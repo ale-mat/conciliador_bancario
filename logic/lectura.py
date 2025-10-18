@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import math
 import unicodedata
+from numbers import Integral, Real
 
 import pandas as pd
 
@@ -116,6 +118,27 @@ def calcular_importe_final(
     raise ValueError("Debe seleccionar Importe único o columnas de Débito y Crédito.")
 
 
+def _normalizar_descripcion(valor) -> str:
+    """Devuelve siempre texto sin sufijos `.0` cuando provienen de números."""
+    if pd.isna(valor):
+        return ""
+    if isinstance(valor, str):
+        return valor
+    if isinstance(valor, Integral):
+        return str(int(valor))
+    if isinstance(valor, Real):
+        numero = float(valor)
+        if math.isfinite(numero) and numero.is_integer():
+            return str(int(numero))
+        return str(valor)
+    return str(valor)
+
+
+def normalizar_columna_descripcion(serie: pd.Series) -> pd.Series:
+    """Normaliza una serie de descripciones garantizando representación textual uniforme."""
+    return serie.map(_normalizar_descripcion)
+
+
 def normalizar_df(
     df_raw: pd.DataFrame,
     fecha_col: str,
@@ -127,9 +150,9 @@ def normalizar_df(
     df = df_raw.copy()
     df[fecha_col] = pd.to_datetime(df[fecha_col], errors="coerce").dt.floor("d")
     if desc_col and desc_col in df.columns:
-        desc_vals = df[desc_col].astype(str).fillna("")
+        desc_vals = normalizar_columna_descripcion(df[desc_col])
     else:
-        desc_vals = pd.Series([""] * len(df))
+        desc_vals = pd.Series([""] * len(df), index=df.index)
 
     out: list[Movimiento] = []
     for f, imp, d in zip(df[fecha_col], importe_final, desc_vals):

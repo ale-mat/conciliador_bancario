@@ -11,6 +11,7 @@ from logic.lectura import (
     calcular_importe_final,
     detectar_columnas,
     detectar_encabezado,
+    normalizar_columna_descripcion,
 )
 from logic.conciliacion import conciliar, Parametros
 from logic.modelos import Movimiento
@@ -289,6 +290,12 @@ if archivos_banco and archivos_interno:
     # ---- Calcular importe final ----
     df_banco["importe_final"] = calcular_importe_final(df_banco, i_b, deb_b, cred_b)
     df_interno["importe_final"] = calcular_importe_final(df_interno, i_i, deb_i, cred_i)
+
+    # ---- Normalizar textos de descripción ----
+    if d_b and d_b in df_banco.columns:
+        df_banco[d_b] = normalizar_columna_descripcion(df_banco[d_b])
+    if d_i and d_i in df_interno.columns:
+        df_interno[d_i] = normalizar_columna_descripcion(df_interno[d_i])
 
     # ---- Convertir a objetos Movimiento ----
     movs_banco = [

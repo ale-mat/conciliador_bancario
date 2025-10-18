@@ -439,13 +439,15 @@ def normalizar_importes(df: pd.DataFrame, banco: str) -> pd.DataFrame:
                 s = s.str.replace(",", ".", regex=False)
                 df[col] = _to_float(s)
     elif banco == "supervielle":
-        for col in ["Debito", "Credito", "Saldo"]:
-            if col in df.columns:
-                if pd.api.types.is_numeric_dtype(df[col]):
-                    continue
-                s = df[col].astype(str).str.replace(".", "", regex=False)
-                s = s.str.replace(",", ".", regex=False)
-                df[col] = _to_float(s)
+        for canonical in ["debito", "credito", "saldo"]:
+            target = next((col for col in df.columns if _keyize(col) == canonical), None)
+            if target is None:
+                continue
+            if pd.api.types.is_numeric_dtype(df[target]):
+                continue
+            series = df[target].astype(str).str.replace(".", "", regex=False)
+            series = series.str.replace(",", ".", regex=False)
+            df[target] = _to_float(series)
     elif banco in ["galicia", "ciudad"]:
         # pandas respeta decimal="," en read_csv; no acciÃ³n adicional
         pass
